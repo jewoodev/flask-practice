@@ -125,7 +125,7 @@ def tracking_the_ship(tracking_numbers, begin_date, end_date):
         for tracking_number in tracking_numbers:
             tracking_info.append({"shipDateBegin": begin_date, "shipDateEnd": end_date, "trackingNumberInfo": {"trackingNumber": tracking_number}})
         data = {"includeDetailedScans": True, "trackingInfo": tracking_info}
-        return call_fedex_api('/tracking/v1/trackingnumbers', data)
+        return call_fedex_api('/track/v1/trackingnumbers', data)
     except Exception as ex:
         print(ex)
 

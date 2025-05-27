@@ -1,4 +1,3 @@
-import unittest
 import logging
 from unittest.mock import patch, MagicMock
 
