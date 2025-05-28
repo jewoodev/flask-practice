@@ -17,10 +17,10 @@ class Token:
 
     def get_refresh_token(self):
         try:
-            url = CommonFunc.getConfigVal('FEDEX_API_URL') + '/oauth/token'
+            url = CommonFunc.get_config_val('FEDEX_API_URL') + '/oauth/token'
             headers = {'Content-Type': 'application/x-www-form-urlencoded', }
-            data = {'grant_type': 'client_credentials', 'client_id': CommonFunc.getConfigVal('FEDEX_API_KEY'),
-                    'client_secret': CommonFunc.getConfigVal('FEDEX_SECRET_KEY'), }
+            data = {'grant_type': 'client_credentials', 'client_id': CommonFunc.get_config_val('FEDEX_API_KEY'),
+                    'client_secret': CommonFunc.get_config_val('FEDEX_SECRET_KEY'), }
             response = requests.post(url, headers=headers, data=data)
 
             response_json = json.loads(response.text) if response and response.status_code == 200 else None
@@ -134,7 +134,7 @@ def tracking_the_ship(tracking_numbers, begin_date, end_date):
 
 
 def call_fedex_api(path, data):
-    url = CommonFunc.getConfigVal('FEDEX_API_URL') + path
+    url = CommonFunc.get_config_val('FEDEX_API_URL') + path
     headers = {
         'Content-Type': 'application/json',
         'Authorization': get_cache_token()
@@ -142,7 +142,7 @@ def call_fedex_api(path, data):
 
     data = json.dumps(data)
 
-    response = requests.post(CommonFunc.getConfigVal('FEDEX_API_URL') + path, headers=headers, data=data)
+    response = requests.post(CommonFunc.get_config_val('FEDEX_API_URL') + path, headers=headers, data=data)
     return json.loads(response.text), response
 
 def get_cache_token():

@@ -4,10 +4,10 @@ from flask import current_app
 
 logging = logging.getLogger(__name__)
 
-class CommonFunc():
+class CommonFunc:
 
     @staticmethod
-    def getConfigVal(str_key):
+    def get_config_val(str_key):
         if current_app.config[str_key]:
             return current_app.config[str_key]
         else:
