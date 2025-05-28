@@ -1,10 +1,7 @@
 import json
 import logging
-from abc import get_cache_token
-from datetime import datetime, timedelta
-
-import iso8601
 import requests
+from datetime import datetime, timedelta
 
 from dhl.common.common_function import CommonFunc
 from dhl.repository import order_repository
@@ -25,7 +22,6 @@ class Token:
             data = {'grant_type': 'client_credentials', 'client_id': CommonFunc.getConfigVal('FEDEX_API_KEY'),
                     'client_secret': CommonFunc.getConfigVal('FEDEX_SECRET_KEY'), }
             response = requests.post(url, headers=headers, data=data)
-            logger.error(response)
 
             response_json = json.loads(response.text) if response and response.status_code == 200 else None
 
@@ -97,10 +93,11 @@ def update_delivery_status(tracking_numbers, begin_date, end_date, order_id_list
 
                     else:
                         order = None
+
                         if order_id_list and len(order_id_list) > 0:
                             order = order_repository.find_by_id(order_id_list[index])
                         if order:
-                            completed_date_time = iso8601.parse_date(scan_event['date']) \
+                            completed_date_time = datetime.strptime(scan_event['date'], '%Y-%m-%dT%H:%M:%S%z') \
                                 if 'date' in scan_event \
                                 else None
                             completed_date_time = completed_date_time.astimezone(completed_date_time.tzinfo.utc) \
@@ -110,11 +107,11 @@ def update_delivery_status(tracking_numbers, begin_date, end_date, order_id_list
                                 order.order_status = 'Pending_confirmation'
                                 order_repository.flush()
                                 data.append({'order_id': order.id, 'trackingNumber': tracking_number, 'code': code,
-                                             'order_status': 'Pending_confirmation'})
+                                             'order_status': 'Pending_confirmation', 'completed_date_time': completed_date_time})
                 else:
                     code = track_results[0]['error']['code']
                     data.append({'order_id': None, 'trackingNumber': tracking_number, 'code': code,
-                                             'order_status': None})
+                                             'order_status': None, 'completed_date_time': None})
 
         logger.info(f"배송 추적 응답 => {data}")
         return data, None
