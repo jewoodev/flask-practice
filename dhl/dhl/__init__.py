@@ -1,9 +1,10 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 
-from .views.main_views import bp as main_bp
+from dhl.views.main_views import bp as main_bp
 
 db = SQLAlchemy()
+
 
 def create_app(config=None):
     app = Flask(__name__, instance_relative_config=True)
@@ -17,10 +18,10 @@ def create_app(config=None):
     else:
         app.config.from_object(config)
 
-    # db 설정
+    ## db instance initialize
     db.init_app(app)
 
     # 블루프린트 등록
     app.register_blueprint(main_bp)
-    
+
     return app
