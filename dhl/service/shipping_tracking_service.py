@@ -7,8 +7,7 @@ import iso8601
 import requests
 
 from dhl.common.common_function import CommonFunc
-from dhl import db
-from dhl.models import Orders
+from dhl.repository import order_repository
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -26,7 +25,7 @@ class Token:
             data = {'grant_type': 'client_credentials', 'client_id': CommonFunc.getConfigVal('FEDEX_API_KEY'),
                     'client_secret': CommonFunc.getConfigVal('FEDEX_SECRET_KEY'), }
             response = requests.post(url, headers=headers, data=data)
-            print(response)
+            logger.error(response)
 
             response_json = json.loads(response.text) if response and response.status_code == 200 else None
 
@@ -44,18 +43,18 @@ class Token:
 
                 return self.get_token()
 
-            print('Get refresh token failed with invalid response')
+            logger.error('Get refresh token failed with invalid response')
             return None
 
         except Exception as ex:
-            print(ex)
+            logger.error(ex)
 
     def get_token(self):
         try:
             if self._access_token and self._token_type and self._expireDateTime and self._expireDateTime > datetime.utcnow():
                 return self._token_type + ' ' + self._access_token
         except Exception as ex:
-            print(ex)
+            logger.error(ex)
 
         return None
 
@@ -64,15 +63,15 @@ _token = Token()
 
 def update_delivery_status(tracking_numbers, begin_date, end_date, order_id_list):
     try:
-        responseJson, response = tracking_the_ship(tracking_numbers, begin_date, end_date)
+        response_json, response = tracking_the_ship(tracking_numbers, begin_date, end_date)
 
         if not response or response.status_code != 200:
-            logger.error(f"배송 상태 업데이트 요청에 실패, 응답은 {responseJson}")
+            logger.error(f"배송 상태 업데이트 요청에 실패, 응답은 {response_json}")
             logger.error(f'{response}')
             return None, f'error {response.status_code} {response.reason}'
 
         data = []
-        complete_track_results = responseJson['output']['completeTrackResults']
+        complete_track_results = response_json['output']['completeTrackResults']
         index = -1
 
         for tracking_number in tracking_numbers:
@@ -94,14 +93,12 @@ def update_delivery_status(tracking_numbers, begin_date, end_date, order_id_list
                     if code == 'DL' and len(scan_events) > 0:
                         scan_event = next(filter(lambda i: 'eventType' in i and i['eventType'] == 'DL', scan_events), None)
                     if not scan_event:
-                        data.append({'order_uuid': None, 'buyer_member_uuid': None, 'trackingNumber':
-                            tracking_number, 'code': code, 'order_status': None, 'result': -10, 'result_message':
-                            'can not find DL event'})
+                        data.append({'order_id': order.id, 'trackingNumber': tracking_number, 'code': code, 'order_status': None})
+
                     else:
                         order = None
                         if order_id_list and len(order_id_list) > 0:
-                            order = db.session.query(Orders).filter(
-                                Orders.id==order_id_list[index]).first()
+                            order = order_repository.find_by_id(order_id_list[index])
                         if order:
                             completed_date_time = iso8601.parse_date(scan_event['date']) \
                                 if 'date' in scan_event \
@@ -109,13 +106,20 @@ def update_delivery_status(tracking_numbers, begin_date, end_date, order_id_list
                             completed_date_time = completed_date_time.astimezone(completed_date_time.tzinfo.utc) \
                                 if completed_date_time else None
 
-                            if order.order_status == 'DELIVERING':
-                                order.order_status = 'PENDING_CONFIRMATION'
+                            if order.order_status == 'Delivering':
+                                order.order_status = 'Pending_confirmation'
+                                order_repository.flush()
+                                data.append({'order_id': order.id, 'trackingNumber': tracking_number, 'code': code,
+                                             'order_status': 'Pending_confirmation'})
+                else:
+                    code = track_results[0]['error']['code']
+                    data.append({'order_id': None, 'trackingNumber': tracking_number, 'code': code,
+                                             'order_status': None})
 
-
+        logger.info(f"배송 추적 응답 => {data}")
         return data, None
     except Exception as ex:
-        print(ex)
+        logger.info(f"배송 추적 오류 => {ex}")
         return None, str(ex)
 
 
@@ -127,7 +131,7 @@ def tracking_the_ship(tracking_numbers, begin_date, end_date):
         data = {"includeDetailedScans": True, "trackingInfo": tracking_info}
         return call_fedex_api('/track/v1/trackingnumbers', data)
     except Exception as ex:
-        print(ex)
+        logger.error(ex)
 
     return None, None
 
@@ -140,11 +144,8 @@ def call_fedex_api(path, data):
     }
 
     data = json.dumps(data)
-    logger.info(url)
-    logger.info(data)
 
     response = requests.post(CommonFunc.getConfigVal('FEDEX_API_URL') + path, headers=headers, data=data)
-    logger.info(response.text)
     return json.loads(response.text), response
 
 def get_cache_token():
@@ -152,13 +153,13 @@ def get_cache_token():
         token = _token.get_token() if _token else None
         return token if token else get_token()
     except Exception as ex:
-        print(ex)
+        logger.error(ex)
         return None
 
 def get_token():
     try:
         return _token.get_refresh_token()
     except Exception as ex:
-        print(ex)
+        logger.error(ex)
         return None
 
