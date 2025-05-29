@@ -7,3 +7,6 @@ class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True, nullable=False, unique=True, info='자동증가')
     order_status = db.Column(db.String(40), nullable=False, server_default="Requested")
     shipping_company = db.Column(db.String(10), nullable=True)
+    waybill_number = db.Column(db.String(20), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False)
+    updated_at = db.Column(db.DateTime, nullable=False)
