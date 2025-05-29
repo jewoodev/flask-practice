@@ -4,7 +4,12 @@ from flask_sqlalchemy import SQLAlchemy
 from dhl.config import LocalConfig
 from dhl.views.main_views import bp as main_bp
 
+import logging
+
 db = SQLAlchemy()
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 def create_app(configuration=None):
     app = Flask(__name__, instance_relative_config=True)
