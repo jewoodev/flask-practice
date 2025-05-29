@@ -1,15 +1,13 @@
 import json
-import logging
+
 import requests
 from datetime import datetime, timedelta
 import datetime as tz
 
+from dhl import logger
 from dhl.common.common_function import CommonFunc
 from dhl.repository import order_repository
 from dhl.service.dto import FedExDTO, DHLDTO
-
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
 
 class FedExToken:
     _access_token = None
