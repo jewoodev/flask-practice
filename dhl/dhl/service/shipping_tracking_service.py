@@ -4,9 +4,9 @@ import requests
 from datetime import datetime, timedelta
 import datetime as tz
 
-from dhl import logger
+from dhl import logger, db
 from dhl.common.common_function import CommonFunc
-from dhl.repository import order_repository
+from dhl.models import Order
 from dhl.service.dto import FedExDTO, DHLDTO
 
 class FedExToken:
@@ -69,11 +69,11 @@ def update_fedex_delivery_status(dto: FedExDTO):
 
         data = parsing_fedex_response_property(dto, response_json)
 
-        order_repository.commit()
+        db.session.commit()
         logger.info(f"배송 추적 응답 => {data}")
         return data, None
     except Exception as ex:
-        order_repository.rollback()
+        db.session.rollback()
         logger.error(f"배송 추적 오류 => {ex}")
         return None, str(ex)
 
@@ -112,7 +112,7 @@ def parsing_fedex_response_property(dto, response_json):
                     order = None
 
                     if dto.orderIds and len(dto.orderIds) > 0:
-                        order = order_repository.find_by_id(dto.orderIds[index])
+                        order = Order.query.filter_by(id = dto.orderIds[index]).first()
                     if order:
                         completed_date_time = datetime.strptime(scan_event['date'], '%Y-%m-%dT%H:%M:%S%z') \
                             if 'date' in scan_event \
@@ -122,7 +122,7 @@ def parsing_fedex_response_property(dto, response_json):
 
                         if order.order_status == 'Delivering':
                             order.order_status = 'Pending_confirmation'
-                            order_repository.flush()
+                            db.session.flush()
                             data.append({'order_id': order.id, 'trackingNumber': tracking_number, 'code': code,
                                          'order_status': 'Pending_confirmation',
                                          'completed_date_time': completed_date_time})
@@ -193,12 +193,12 @@ def update_dhl_delivery_status(dto: DHLDTO):
                 description = last_checkpoint['description']
                 if description == '수취인에게 배달되었습니다.':
                     waybill_number = shipments['shipmentTrackingNumber']
-                    order = order_repository.find_by_waybill_number(waybill_number)
+                    order = Order.query.filter_by(waybill_number = waybill_number).first()
                     order.order_status = 'Pending_confirmation'
                     data.append({'shipmentTrackingNumber': waybill_number, 'description': description})
 
-        order_repository.flush()
-        order_repository.commit()
+        db.session.flush()
+        db.session.commit()
         logger.info(f"배송 추적 응답 => {data}")
         return data, None
     except Exception as ex:

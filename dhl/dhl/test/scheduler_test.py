@@ -3,10 +3,9 @@ import datetime as tz
 
 import pytest
 
-from dhl import create_app
+from dhl import create_app, db
 from dhl.config import TestConfig
 from dhl.models import Order
-from dhl.repository import order_repository
 from dhl.service.scheduler import renew_order_status
 
 @pytest.fixture
@@ -21,9 +20,9 @@ def app():
 def app_ctx(app):
     with app.app_context():
         yield
-        order_repository.delete_all()
-        order_repository.commit()
-        order_repository.close()
+        Order.query.delete()
+        db.session.commit()
+        db.session.close()
 
 def test_renew_order_status(app, app_ctx):
     orders = []
@@ -58,11 +57,12 @@ def test_renew_order_status(app, app_ctx):
     )
     orders.append(dhl_order2)
 
-    order_repository.insert_all(orders)
-    order_repository.commit()
+    db.session.add_all(orders)
+    db.session.commit()
 
     renew_order_status()
 
-    assert order_repository.find_by_id(1).order_status == 'Pending_confirmation'
-    assert order_repository.find_by_id(2).order_status == 'Pending_confirmation'
-    assert order_repository.find_by_id(3).order_status == 'Pending_confirmation'
+
+    assert Order.query.filter_by(id = 1).first().order_status == 'Pending_confirmation'
+    assert Order.query.filter_by(id = 2).first().order_status == 'Pending_confirmation'
+    assert Order.query.filter_by(id = 3).first().order_status == 'Pending_confirmation'
