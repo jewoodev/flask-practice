@@ -1,9 +1,8 @@
 from datetime import datetime, timedelta
 import datetime as tz
 
-from flask import app
-
-from dhl.repository import order_repository
+from dhl import db
+from dhl.models import Order
 from dhl.service.dto import FedExDTO, DHLDTO
 from dhl.service.shipping_tracking_service import update_fedex_delivery_status, update_dhl_delivery_status, logger
 
@@ -14,7 +13,9 @@ def renew_order_status():
         start_datetime = datetime.now(tz.UTC) + timedelta(days=-180)
         end_datetime = datetime.now(tz.UTC)
 
-        order = order_repository.find_by_order_status_and_after('Delivering', start_datetime)
+        order = db.session.query(Order).filter(
+            Order.order_status == 'Delivering',
+            Order.created_at >= start_datetime)
 
         search_tmp = order.paginate(page=1, per_page=30, error_out=False)
         total_page_count = search_tmp.pages
@@ -56,7 +57,7 @@ def renew_order_status():
                         )
                     )
     except Exception as ex:
-        order_repository.rollback()
+        db.session.rollback()
         logger.error(f'주문 상태 갱신 중 오류[배송관련] {ex}')
     finally:
-        order_repository.close()
+        db.session.close()
