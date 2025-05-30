@@ -19,7 +19,7 @@ def find_by_order_status_and_after(order_status: str, start_datetime: datetime):
         Order.created_at >= start_datetime
     )
 
-def find_by_waybill_number(waybill_number: int):
+def find_by_waybill_number(waybill_number: str):
     return db.session.query(Order).filter(
         Order.waybill_number == waybill_number
     ).first()

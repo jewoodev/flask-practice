@@ -3,4 +3,6 @@
 .vscode
 
 ### ETC
+.venv
 /dhl/config.py
+
