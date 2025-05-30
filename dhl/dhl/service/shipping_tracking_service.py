@@ -26,7 +26,7 @@ class FedExToken:
             response_json = json.loads(response.text) if response and response.status_code == 200 else None
 
             if response_json and 'access_token' in response_json and 'token_type' in response_json \
-                and 'expires_in' in response_json and 'scope' in response_json:
+                    and 'expires_in' in response_json and 'scope' in response_json:
 
                 access_token = response_json['access_token']
                 token_type = response_json['token_type']
@@ -57,18 +57,18 @@ class FedExToken:
 
 _token = FedExToken()
 
-
-def update_fedex_delivery_status(dto: FedExDTO):
+def renew_fedex_delivery_status(dto: FedExDTO):
     try:
-        response_json, response = tracking_the_fedex_ship(dto)
+        response_json, response = call_fedex_api(dto)
 
         if not response or response.status_code != 200:
             logger.error(f"배송 상태 업데이트 요청에 실패, 응답은 {response_json}")
             logger.error(f'{response}')
             return None, f'error {response.status_code} {response.reason}'
 
-        data = parsing_fedex_response_property(dto, response_json)
+        data = check_fedex_response_and_update_order_status(dto, response_json)
 
+        db.session.flush()
         db.session.commit()
         logger.info(f"배송 추적 응답 => {data}")
         return data, None
@@ -78,15 +78,15 @@ def update_fedex_delivery_status(dto: FedExDTO):
         return None, str(ex)
 
 
-def parsing_fedex_response_property(dto, response_json):
+def check_fedex_response_and_update_order_status(dto: FedExDTO, response_json):
     data = []
     complete_track_results = response_json['output']['completeTrackResults']
-    index = -1
-    for tracking_number in dto.trackingNumbers:
-        index += 1
+    for key in dto.trackingPairs: # 담겨진 trackingPairs를 순회하며 update
+        cur_tracking_number = key
+        cur_order_id = dto.trackingPairs[key]
         # 이번 순서의 complete_track_result를 찾아
         complete_track_result = next(
-            filter(lambda i: 'trackingNumber' in i and i['trackingNumber'] == tracking_number, complete_track_results),
+            filter(lambda i: 'trackingNumber' in i and i['trackingNumber'] == cur_tracking_number, complete_track_results),
             None)
         if complete_track_result:
             # trackResults 값을 검증, 그 하위의 값들도 검증하여 리턴할 dict에 append한다.
@@ -101,64 +101,59 @@ def parsing_fedex_response_property(dto, response_json):
                 if (latest_status_detail and 'code' in latest_status_detail) \
                 else None
 
-            if tracking_number and code:
+            if cur_tracking_number and code:
                 if code == 'DL' and len(scan_events) > 0:
                     scan_event = next(filter(lambda i: 'eventType' in i and i['eventType'] == 'DL', scan_events), None)
-                if not scan_event:
-                    data.append(
-                        {'order_id': order.id, 'trackingNumber': tracking_number, 'code': code, 'order_status': None})
+                    if not scan_event:
+                        data.append(
+                            {'order_id': None, 'trackingNumber': cur_tracking_number, 'code': code, 'order_status': None})
+                    else:
+                        order_to_update = Order.query.filter_by(id = cur_order_id).first()
 
-                else:
-                    order = None
+                        if order_to_update:
+                            completed_date_time = datetime.strptime(scan_event['date'], '%Y-%m-%dT%H:%M:%S%z') \
+                                if 'date' in scan_event \
+                                else None
+                            completed_date_time = completed_date_time.astimezone(completed_date_time.tzinfo.utc) \
+                                if completed_date_time \
+                                else None
 
-                    if dto.orderIds and len(dto.orderIds) > 0:
-                        order = Order.query.filter_by(id = dto.orderIds[index]).first()
-                    if order:
-                        completed_date_time = datetime.strptime(scan_event['date'], '%Y-%m-%dT%H:%M:%S%z') \
-                            if 'date' in scan_event \
-                            else None
-                        completed_date_time = completed_date_time.astimezone(completed_date_time.tzinfo.utc) \
-                            if completed_date_time else None
-
-                        if order.order_status == 'Delivering':
-                            order.order_status = 'Pending_confirmation'
-                            db.session.flush()
-                            data.append({'order_id': order.id, 'trackingNumber': tracking_number, 'code': code,
-                                         'order_status': 'Pending_confirmation',
-                                         'completed_date_time': completed_date_time})
+                            if order_to_update.order_status == 'Delivering':
+                                order_to_update.order_status = 'Pending_confirmation'
+                                data.append({'order_id': order_to_update.id, 'trackingNumber': cur_tracking_number, 'code': code,
+                                             'order_status': 'Pending_confirmation',
+                                             'completed_date_time': completed_date_time})
             else:
                 code = track_results[0]['error']['code']
-                data.append({'order_id': None, 'trackingNumber': tracking_number, 'code': code,
+                data.append({'order_id': None, 'trackingNumber': cur_tracking_number, 'code': code,
                              'order_status': None, 'completed_date_time': None})
     return data
 
-
-def tracking_the_fedex_ship(dto: FedExDTO):
-    try:
-        tracking_info = []
-        for tracking_number in dto.trackingNumbers:
-            tracking_info.append({"shipDateBegin": dto.beginDate, "shipDateEnd": dto.endDate,
-                                  "trackingNumberInfo": {
-                "trackingNumber": tracking_number}})
-        data = {"includeDetailedScans": True, "trackingInfo": tracking_info}
-        return call_fedex_api('/track/v1/trackingnumbers', data)
-    except Exception as ex:
-        logger.error(ex)
-
-    return None, None
-
-
-def call_fedex_api(path, data):
-    url = CommonFunc.get_config_val('FEDEX_API_URL') + path
+def call_fedex_api(dto: FedExDTO):
+    url = CommonFunc.get_config_val('FEDEX_API_URL') + '/track/v1/trackingnumbers'
     headers = {
         'Content-Type': 'application/json',
         'Authorization': get_cache_token()
     }
 
-    data = json.dumps(data)
+    body = make_fedex_request_body(dto)
 
-    response = requests.post(CommonFunc.get_config_val('FEDEX_API_URL') + path, headers=headers, data=data)
+    response = requests.post(url, headers=headers, data=body)
     return json.loads(response.text), response
+
+def make_fedex_request_body(dto: FedExDTO):
+    try:
+        tracking_info = []
+        for tracking_number in dto.trackingPairs:
+            tracking_info.append({"shipDateBegin": dto.beginDate, "shipDateEnd": dto.endDate,
+                                  "trackingNumberInfo": {
+                "trackingNumber": tracking_number}})
+        data = {"includeDetailedScans": True, "trackingInfo": tracking_info}
+        return json.dumps(data)
+    except Exception as ex:
+        logger.error(ex)
+
+    return None, None
 
 def get_cache_token():
     try:
@@ -175,27 +170,17 @@ def get_token():
         logger.error(ex)
         return None
 
-def update_dhl_delivery_status(dto: DHLDTO):
+def renew_dhl_delivery_status(dto: DHLDTO):
     try:
-        response_json, response = tracking_dhl_ship(dto)
+        response_json, response = call_dhl_api(dto)
 
         if not response or response.status_code != 200:
             logger.error(f"배송 상태 업데이트 요청에 실패, 응답은 {response_json}")
             logger.error(f'{response}')
             return None, f'error {response.status_code} {response.reason}'
 
-        data = []
 
-        for shipments in response_json['shipments']:
-            pieces = shipments['pieces']
-            for piece in pieces:
-                last_checkpoint = piece['events'][0]
-                description = last_checkpoint['description']
-                if description == '수취인에게 배달되었습니다.':
-                    waybill_number = shipments['shipmentTrackingNumber']
-                    order = Order.query.filter_by(waybill_number = waybill_number).first()
-                    order.order_status = 'Pending_confirmation'
-                    data.append({'shipmentTrackingNumber': waybill_number, 'description': description})
+        data = check_dhl_response_and_update_delivery_status(dto, response_json)
 
         db.session.flush()
         db.session.commit()
@@ -207,18 +192,36 @@ def update_dhl_delivery_status(dto: DHLDTO):
 
     return None, None
 
-
-def tracking_dhl_ship(dto: DHLDTO):
+def call_dhl_api(dto: DHLDTO):
+    url = CommonFunc.get_config_val('DHL_API_URL')
     headers = {
-        'Authorization': 'Basic ******',
+        'Authorization': 'Basic ' + CommonFunc.get_config_val('DHL_AUTH_KEY'),
         'Accept-Language': 'kor'
     }
 
     payload = {
-        'shipmentTrackingNumber': dto.shipmentTrackingNumber,
+        'shipmentTrackingNumber': dto.trackingPairs.keys(),
         'trackingView': dto.trackingView,
         'levelOfDetail': dto.levelOfDetail
     }
 
-    response = requests.get('https://express.api.dhl.com/mydhlapi/test/tracking', params=payload, headers=headers)
+    response = requests.get(url, params=payload, headers=headers)
     return json.loads(response.text), response
+
+def check_dhl_response_and_update_delivery_status(dto: DHLDTO, response_json):
+    data = []
+
+    for shipment in response_json['shipments']:
+        cur_tracking_number = shipment['shipmentTrackingNumber']
+        cur_order_id = dto.trackingPairs[cur_tracking_number]
+        pieces = shipment['pieces']
+        for piece in pieces:
+            last_checkpoint = piece['events'][0]
+            description = last_checkpoint['description']
+            if description == '수취인에게 배달되었습니다.':
+                waybill_number = shipment['shipmentTrackingNumber']
+                order_to_update = Order.query.filter_by(id=cur_order_id).first()
+                order_to_update.order_status = 'Pending_confirmation'
+                data.append({'shipmentTrackingNumber': waybill_number, 'description': description})
+
+    return data
