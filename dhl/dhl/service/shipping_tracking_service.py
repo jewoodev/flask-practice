@@ -58,24 +58,17 @@ class FedExToken:
 _token = FedExToken()
 
 def renew_fedex_delivery_status(dto: FedExDTO):
-    try:
-        response_json, response = call_fedex_api(dto)
+    response_json, response = call_fedex_api(dto)
 
-        if not response or response.status_code != 200:
-            logger.error(f"배송 상태 업데이트 요청에 실패, 응답은 {response_json}")
-            logger.error(f'{response}')
-            return None, f'error {response.status_code} {response.reason}'
+    if not response or response.status_code != 200:
+        logger.error(f"배송 상태 업데이트 요청에 실패, 응답은 {response_json}")
+        logger.error(f'{response}')
+        return None, f'error {response.status_code} {response.reason}'
 
-        data = check_fedex_response_and_update_order_status(dto, response_json)
+    data = check_fedex_response_and_update_order_status(dto, response_json)
 
-        db.session.flush()
-        db.session.commit()
-        logger.info(f"배송 추적 응답 => {data}")
-        return data, None
-    except Exception as ex:
-        db.session.rollback()
-        logger.error(f"배송 추적 오류 => {ex}")
-        return None, str(ex)
+    logger.info(f"배송 추적 응답 => {data}")
+    return data, None
 
 
 def check_fedex_response_and_update_order_status(dto: FedExDTO, response_json):
@@ -111,12 +104,11 @@ def check_fedex_response_and_update_order_status(dto: FedExDTO, response_json):
                         order_to_update = Order.query.filter_by(id = cur_order_id).first()
 
                         if order_to_update:
-                            completed_date_time = datetime.strptime(scan_event['date'], '%Y-%m-%dT%H:%M:%S%z') \
-                                if 'date' in scan_event \
-                                else None
-                            completed_date_time = completed_date_time.astimezone(completed_date_time.tzinfo.utc) \
-                                if completed_date_time \
-                                else None
+                            if 'date' in scan_event:
+                                completed_date_time = datetime.strptime(scan_event['date'], '%Y-%m-%dT%H:%M:%S%z')
+                                completed_date_time = completed_date_time.astimezone(completed_date_time.tzinfo.utc)
+                            else:
+                                completed_date_time = None
 
                             if order_to_update.order_status == 'Delivering':
                                 order_to_update.order_status = 'Pending_confirmation'
@@ -171,26 +163,18 @@ def get_token():
         return None
 
 def renew_dhl_delivery_status(dto: DHLDTO):
-    try:
-        response_json, response = call_dhl_api(dto)
+    response_json, response = call_dhl_api(dto)
 
-        if not response or response.status_code != 200:
-            logger.error(f"배송 상태 업데이트 요청에 실패, 응답은 {response_json}")
-            logger.error(f'{response}')
-            return None, f'error {response.status_code} {response.reason}'
+    if not response or response.status_code != 200:
+        logger.error(f"배송 상태 업데이트 요청에 실패, 응답은 {response_json}")
+        logger.error(f'{response}')
+        return None, f'error {response.status_code} {response.reason}'
 
 
-        data = check_dhl_response_and_update_delivery_status(dto, response_json)
+    data = check_dhl_response_and_update_delivery_status(dto, response_json)
 
-        db.session.flush()
-        db.session.commit()
-        logger.info(f"배송 추적 응답 => {data}")
-        return data, None
-    except Exception as ex:
-        logger.error(f"배송 추적 오류 => {ex}")
-        return None, str(ex)
-
-    return None, None
+    logger.info(f"배송 추적 응답 => {data}")
+    return data, None
 
 def call_dhl_api(dto: DHLDTO):
     url = CommonFunc.get_config_val('DHL_API_URL')
@@ -217,11 +201,11 @@ def check_dhl_response_and_update_delivery_status(dto: DHLDTO, response_json):
         pieces = shipment['pieces']
         for piece in pieces:
             last_checkpoint = piece['events'][0]
-            description = last_checkpoint['description']
-            if description == '수취인에게 배달되었습니다.':
+            type_code = last_checkpoint['typeCode']
+            if type_code == 'OK':
                 waybill_number = shipment['shipmentTrackingNumber']
                 order_to_update = Order.query.filter_by(id=cur_order_id).first()
                 order_to_update.order_status = 'Pending_confirmation'
-                data.append({'shipmentTrackingNumber': waybill_number, 'description': description})
+                data.append({'shipmentTrackingNumber': waybill_number, 'typeCode': type_code})
 
     return data
