@@ -51,6 +51,8 @@ def renew_order_status():
                             trackingView='last-checkpoint'
                         )
                     )
+
+        db.session.commit()
     except Exception as ex:
         db.session.rollback()
         logger.error(f'주문 상태 갱신 중 오류[배송관련] {ex}')
