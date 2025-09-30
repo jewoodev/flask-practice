@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
 import datetime as tz
 
-from dhl import db
-from dhl.models import Order
-from dhl.service.dto import FedExDTO, DHLDTO
-from dhl.service.shipping_tracking_service import renew_fedex_delivery_status, renew_dhl_delivery_status, logger
+from delivery_tracking import db
+from delivery_tracking.models import Order
+from delivery_tracking.service.dto import FedExDTO, DHLDTO
+from delivery_tracking.service.shipping_tracking_service import renew_fedex_delivery_status, renew_dhl_delivery_status, logger
 
 
 def renew_order_status():

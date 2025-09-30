@@ -1,0 +1,10 @@
+### IDEA
+.idea
+**/.idea
+.vscode
+**/.vscode
+
+### ETC
+**/.venv
+/delivery_tracking/config.py
+

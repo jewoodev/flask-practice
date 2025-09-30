@@ -1,4 +1,4 @@
-from dhl import db
+from delivery_tracking import db
 
 
 class Order(db.Model):

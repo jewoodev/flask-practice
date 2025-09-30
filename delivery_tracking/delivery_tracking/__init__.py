@@ -2,8 +2,8 @@ from flask import Flask
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 
-from dhl.config import TestConfig
-from dhl.views.main_views import bp as main_bp
+from delivery_tracking.config import TestConfig
+from delivery_tracking.views.main_views import bp as main_bp
 
 import logging
 

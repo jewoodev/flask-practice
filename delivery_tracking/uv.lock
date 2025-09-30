@@ -78,7 +78,7 @@ wheels = [
 ]
 
 [[package]]
-name = "dhl"
+name = "delivery-tracking"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

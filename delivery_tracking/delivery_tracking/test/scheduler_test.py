@@ -3,10 +3,10 @@ import datetime as tz
 
 import pytest
 
-from dhl import create_app, db
-from dhl.config import TestConfig
-from dhl.models import Order
-from dhl.service.scheduler import renew_order_status
+from delivery_tracking import create_app, db
+from delivery_tracking.config import TestConfig
+from delivery_tracking.models import Order
+from delivery_tracking.service.scheduler import renew_order_status
 
 @pytest.fixture
 def app():

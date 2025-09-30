@@ -4,10 +4,10 @@ import requests
 from datetime import datetime, timedelta
 import datetime as tz
 
-from dhl import logger, db
-from dhl.common.common_function import CommonFunc
-from dhl.models import Order
-from dhl.service.dto import FedExDTO, DHLDTO
+from delivery_tracking import logger, db
+from delivery_tracking.common.common_function import CommonFunc
+from delivery_tracking.models import Order
+from delivery_tracking.service.dto import FedExDTO, DHLDTO
 
 class FedExToken:
     _access_token = None
